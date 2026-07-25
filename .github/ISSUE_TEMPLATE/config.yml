@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/Alexei-Simons/bb8-app/issues/new?template=feature_request.yml
+    about: Ask a question or suggest an improvement (use Feature request if unsure)
+  - name: Security vulnerability
+    url: https://github.com/Alexei-Simons/bb8-app/security/advisories/new
+    about: Report a security issue privately (do not use public issues)

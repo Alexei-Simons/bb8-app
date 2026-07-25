@@ -210,7 +210,6 @@ Please do not submit Sphero copyrighted assets (sounds, animations, branding). T
 | Document | Description |
 |----------|-------------|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, PR workflow, coding standards |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [PRIVACY.md](PRIVACY.md) | Data collection and storage (local only) |
 | [LEGAL.md](LEGAL.md) | Trademarks, disclaimers, liability |

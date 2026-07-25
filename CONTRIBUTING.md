@@ -137,7 +137,7 @@ Optional protocol references live under `vendor/` (see `vendor/README.md`). Clon
 
 ## Code of conduct
 
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Be respectful and constructive in issues and reviews.
+Please be respectful and constructive in issues and reviews.
 
 ---
 

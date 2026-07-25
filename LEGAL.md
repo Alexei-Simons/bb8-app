@@ -91,7 +91,7 @@ You are responsible for compliance with applicable laws in your jurisdiction whe
 
 By contributing to this repository, you agree that your contributions are licensed under the same [MIT License](LICENSE) as the project, and that you have the right to submit them.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

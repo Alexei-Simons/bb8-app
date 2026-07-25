@@ -31,6 +31,11 @@ data class BatteryHealth(
     val summary: String,
     val detail: String,
 ) {
+    val diagnosticsOnly: Boolean
+        get() = level == BatteryHealthLevel.CRITICAL ||
+            powerState == PowerState.CRITICAL ||
+            (powerState == PowerState.CHARGING && voltageVolts < 3.45f)
+
     companion object {
         private const val FULL_VOLTAGE = 4.15f
         private const val HEALTHY_VOLTAGE = 3.75f

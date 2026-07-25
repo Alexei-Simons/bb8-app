@@ -3,6 +3,8 @@ package com.bb8.app.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -11,6 +13,8 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +28,8 @@ import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,8 +51,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.bb8.app.LedPreset
 import com.bb8.app.ble.BatteryHealth
 import com.bb8.app.ble.BatteryHealthLevel
+import com.bb8.app.sphero.Bb8Animation
 import com.bb8.app.ui.components.ConnectionPill
 import com.bb8.app.ui.components.SecondaryActionButton
 import com.bb8.app.ui.theme.Bb8Orange
@@ -68,6 +76,7 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DriveScreen(
     deviceName: String,
@@ -75,16 +84,26 @@ fun DriveScreen(
     batteryHealth: BatteryHealth?,
     batteryReadAttempted: Boolean,
     aimOffsetDegrees: Int,
+    diagnosticsOnly: Boolean,
+    patrolActive: Boolean,
+    boostCooldown: Boolean,
+    selectedLed: LedPreset,
     onDrive: (Float, Float) -> Unit,
     onStopDriving: () -> Unit,
     onAimChange: (Int) -> Unit,
     onResetAim: () -> Unit,
     onDisconnect: () -> Unit,
+    onLedColor: (LedPreset) -> Unit,
+    onBoost: () -> Unit,
+    onTogglePatrol: () -> Unit,
+    onPlayAnimation: (Bb8Animation) -> Unit,
+    onStopAnimation: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var stickX by remember { mutableStateOf(0f) }
     var stickY by remember { mutableStateOf(0f) }
     var batteryExpanded by remember { mutableStateOf(true) }
+    var extrasExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -124,6 +143,24 @@ fun DriveScreen(
             else -> BatteryStatusLoadingCard()
         }
 
+        if (diagnosticsOnly) {
+            DiagnosticsBanner()
+        }
+
+        DriveExtrasPanel(
+            expanded = extrasExpanded,
+            onToggle = { extrasExpanded = !extrasExpanded },
+            diagnosticsOnly = diagnosticsOnly,
+            patrolActive = patrolActive,
+            boostCooldown = boostCooldown,
+            selectedLed = selectedLed,
+            onLedColor = onLedColor,
+            onBoost = onBoost,
+            onTogglePatrol = onTogglePatrol,
+            onPlayAnimation = onPlayAnimation,
+            onStopAnimation = onStopAnimation,
+        )
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
@@ -132,7 +169,11 @@ fun DriveScreen(
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Text(
-                    text = "Rotate outer ring to aim · Drag center to drive",
+                    text = if (diagnosticsOnly) {
+                        "Diagnostics mode: aim ring only. Driving disabled."
+                    } else {
+                        "Rotate outer ring to aim · Drag center to drive"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = TextMuted,
                 )
@@ -155,6 +196,7 @@ fun DriveScreen(
                 stickX = stickX,
                 stickY = stickY,
                 aimDegrees = aimOffsetDegrees,
+                driveEnabled = !diagnosticsOnly && !patrolActive,
                 onStickChange = { x, y ->
                     stickX = x
                     stickY = y
@@ -183,6 +225,127 @@ fun DriveScreen(
                 onClick = onDisconnect,
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsBanner() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = StatusCritical.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, StatusCritical.copy(alpha = 0.35f)),
+    ) {
+        Text(
+            text = "Battery critically low. Charger-only diagnostics: LED and animations may work, driving is disabled.",
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = StatusCritical,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DriveExtrasPanel(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    diagnosticsOnly: Boolean,
+    patrolActive: Boolean,
+    boostCooldown: Boolean,
+    selectedLed: LedPreset,
+    onLedColor: (LedPreset) -> Unit,
+    onBoost: () -> Unit,
+    onTogglePatrol: () -> Unit,
+    onPlayAnimation: (Bb8Animation) -> Unit,
+    onStopAnimation: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = SpacePanel.copy(alpha = 0.7f),
+        border = BorderStroke(1.dp, SpaceBorder),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "LED · Boost · Patrol · Animations",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                IconButton(onClick = onToggle) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        tint = TextMuted,
+                    )
+                }
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(text = "LED color", style = MaterialTheme.typography.labelMedium, color = TextMuted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LedPreset.entries.forEach { preset ->
+                            FilterChip(
+                                selected = selectedLed == preset,
+                                onClick = { onLedColor(preset) },
+                                label = { Text(preset.label) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Bb8Orange.copy(alpha = 0.25f),
+                                ),
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryActionButton(
+                            text = if (boostCooldown) "Boost…" else "Boost",
+                            onClick = onBoost,
+                            modifier = Modifier.weight(1f),
+                        )
+                        SecondaryActionButton(
+                            text = if (patrolActive) "Stop patrol" else "Patrol",
+                            onClick = onTogglePatrol,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (diagnosticsOnly) {
+                        Text(
+                            text = "Boost and patrol need a healthier battery.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted,
+                        )
+                    }
+                    Text(text = "Animations", style = MaterialTheme.typography.labelMedium, color = TextMuted)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Bb8Animation.entries.forEach { animation ->
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPlayAnimation(animation) },
+                                label = { Text(animation.label) },
+                            )
+                        }
+                        FilterChip(
+                            selected = false,
+                            onClick = onStopAnimation,
+                            label = { Text("Stop") },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -344,6 +507,7 @@ private fun Joystick(
     stickX: Float,
     stickY: Float,
     aimDegrees: Int,
+    driveEnabled: Boolean,
     onStickChange: (Float, Float) -> Unit,
     onStickRelease: () -> Unit,
     onAimChange: (Int) -> Unit,
@@ -372,7 +536,7 @@ private fun Joystick(
                                 onAimChange(offsetToHeading(change.position, center))
                             }
                         }
-                    } else if (normalizedDistance < 0.48f) {
+                    } else if (normalizedDistance < 0.48f && driveEnabled) {
                         val (startX, startY) = offsetToStick(down.position, width, height)
                         onStickChange(startX, startY)
                         drag(down.id) { change ->

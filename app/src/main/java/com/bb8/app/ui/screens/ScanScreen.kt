@@ -1,6 +1,9 @@
 package com.bb8.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +28,7 @@ import com.bb8.app.ui.components.ScreenHeader
 import com.bb8.app.ui.components.StatusBanner
 import com.bb8.app.ui.components.TipCard
 import com.bb8.app.ui.theme.Bb8Orange
+import com.bb8.app.ui.theme.Bb8Teal
 import com.bb8.app.ui.theme.TextMuted
 import com.bb8.app.ui.theme.TextSecondary
 
@@ -33,9 +37,13 @@ fun ScanScreen(
     connectionState: ConnectionState,
     scannedDevices: List<ScannedDevice>,
     statusMessage: String?,
+    lastDevice: ScannedDevice?,
+    autoReconnectEnabled: Boolean,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
     onConnect: (ScannedDevice) -> Unit,
+    onConnectLastDevice: () -> Unit,
+    onAutoReconnectChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isScanning = connectionState is ConnectionState.Scanning
@@ -55,8 +63,37 @@ fun ScanScreen(
 
         TipCard(
             text = "Wake BB-8 off the charger (shake gently), then scan. " +
-                "Keep him nearby — BLE range is short.",
+                "Keep him nearby - BLE range is short.",
         )
+
+        lastDevice?.let { device ->
+            DeviceCard(
+                name = "Reconnect to ${device.name}",
+                address = device.address,
+                enabled = !isBusy,
+                onClick = onConnectLastDevice,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Auto-reconnect",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+            )
+            Switch(
+                checked = autoReconnectEnabled,
+                onCheckedChange = onAutoReconnectChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Bb8Orange,
+                    checkedTrackColor = Bb8Teal.copy(alpha = 0.4f),
+                ),
+            )
+        }
 
         when {
             connectionState is ConnectionState.Error -> {

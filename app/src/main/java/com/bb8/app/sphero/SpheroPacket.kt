@@ -14,16 +14,22 @@ enum class ReverseFlag(val code: Int) {
 object SpheroDeviceIds {
     const val CORE: Int = 0x00
     const val SPHERO: Int = 0x02
+    const val ANIMATRONIC: Int = 0x17
 }
 
 object SpheroCommandIds {
     const val PING: Int = 0x01
     const val SET_HEADING: Int = 0x01
     const val SET_STABILIZATION: Int = 0x02
+    const val SET_DATA_STREAMING: Int = 0x11
     const val GET_POWER_STATE: Int = 0x20
     const val SET_MAIN_LED: Int = 0x20
     const val SET_INACTIVITY_TIMEOUT: Int = 0x25
     const val ROLL: Int = 0x30
+    const val BOOST: Int = 0x31
+    const val RUN_MACRO: Int = 0x50
+    const val PLAY_ANIMATION: Int = 0x05
+    const val STOP_ANIMATION: Int = 0x2B
 }
 
 data class SpheroPacket(
@@ -125,4 +131,46 @@ object SpheroCommands {
 
     fun calibrateHeading(builder: SpheroPacketBuilder, heading: Int): SpheroPacket =
         roll(builder, 0, heading, RollMode.CALIBRATE, ReverseFlag.OFF)
+
+    fun boost(builder: SpheroPacketBuilder): SpheroPacket {
+        val data = byteArrayOf(1, 0, 0)
+        return builder.build(SpheroDeviceIds.SPHERO, SpheroCommandIds.BOOST, data)
+    }
+
+    fun runMacro(builder: SpheroPacketBuilder, macroId: Int): SpheroPacket {
+        val data = byteArrayOf(macroId.coerceIn(0, 255).toByte())
+        return builder.build(SpheroDeviceIds.SPHERO, SpheroCommandIds.RUN_MACRO, data)
+    }
+
+    fun playAnimation(builder: SpheroPacketBuilder, animationId: Int): SpheroPacket {
+        val id = animationId.coerceIn(0, 65535)
+        val data = byteArrayOf(
+            ((id shr 8) and 0xFF).toByte(),
+            (id and 0xFF).toByte(),
+        )
+        return builder.build(SpheroDeviceIds.ANIMATRONIC, SpheroCommandIds.PLAY_ANIMATION, data)
+    }
+
+    fun stopAnimation(builder: SpheroPacketBuilder): SpheroPacket =
+        builder.build(SpheroDeviceIds.ANIMATRONIC, SpheroCommandIds.STOP_ANIMATION)
+
+    fun enableLocatorStreaming(builder: SpheroPacketBuilder): SpheroPacket {
+        val locatorMask = 0x4000000
+        val data = byteArrayOf(
+            0x00, 0x64,
+            0x00, 0x01,
+            ((locatorMask shr 24) and 0xFF).toByte(),
+            ((locatorMask shr 16) and 0xFF).toByte(),
+            ((locatorMask shr 8) and 0xFF).toByte(),
+            (locatorMask and 0xFF).toByte(),
+            0x00,
+            0x00, 0x00, 0x00, 0x00,
+        )
+        return builder.build(SpheroDeviceIds.SPHERO, SpheroCommandIds.SET_DATA_STREAMING, data)
+    }
+
+    fun disableDataStreaming(builder: SpheroPacketBuilder): SpheroPacket {
+        val data = ByteArray(11)
+        return builder.build(SpheroDeviceIds.SPHERO, SpheroCommandIds.SET_DATA_STREAMING, data)
+    }
 }

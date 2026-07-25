@@ -7,6 +7,9 @@ import com.bb8.app.ble.Bb8BleManager
 import com.bb8.app.ble.BatteryHealth
 import com.bb8.app.ble.ConnectionState
 import com.bb8.app.ble.ScannedDevice
+import com.bb8.app.data.Bb8Preferences
+import com.bb8.app.sphero.Bb8Animation
+import com.bb8.app.util.Haptics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -21,6 +24,8 @@ import kotlin.math.roundToInt
 
 class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
     private val bleManager = Bb8BleManager(application)
+    private val preferences = Bb8Preferences(application)
+    private val haptics = Haptics(application)
 
     val connectionState: StateFlow<ConnectionState> = bleManager.connectionState
     val scannedDevices: StateFlow<List<ScannedDevice>> = bleManager.scannedDevices
@@ -33,8 +38,27 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
     private val _aimOffsetDegrees = MutableStateFlow(0)
     val aimOffsetDegrees: StateFlow<Int> = _aimOffsetDegrees.asStateFlow()
 
+    private val _onboardingComplete = MutableStateFlow(preferences.onboardingComplete)
+    val onboardingComplete: StateFlow<Boolean> = _onboardingComplete.asStateFlow()
+
+    private val _autoReconnectEnabled = MutableStateFlow(preferences.autoReconnectEnabled)
+    val autoReconnectEnabled: StateFlow<Boolean> = _autoReconnectEnabled.asStateFlow()
+
+    private val _lastDevice = MutableStateFlow(preferences.lastDevice())
+    val lastDevice: StateFlow<ScannedDevice?> = _lastDevice.asStateFlow()
+
+    private val _patrolActive = MutableStateFlow(false)
+    val patrolActive: StateFlow<Boolean> = _patrolActive.asStateFlow()
+
+    private val _boostCooldown = MutableStateFlow(false)
+    val boostCooldown: StateFlow<Boolean> = _boostCooldown.asStateFlow()
+
+    private val _ledColor = MutableStateFlow(LedPreset.ORANGE)
+    val ledColor: StateFlow<LedPreset> = _ledColor.asStateFlow()
+
     private var driveJob: Job? = null
     private var aimJob: Job? = null
+    private var patrolJob: Job? = null
     private var targetSpeed = 0
     private var targetHeading = 0
     private var isMoving = false
@@ -52,15 +76,32 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
                     is ConnectionState.Disconnected -> null
                 }
                 when (state) {
-                    is ConnectionState.Connected -> startDriveLoop()
+                    is ConnectionState.Connected -> {
+                        haptics.confirm()
+                        _lastDevice.value = preferences.lastDevice()
+                        startDriveLoop()
+                    }
                     else -> {
                         driveJob?.cancel()
                         driveJob = null
                         aimJob?.cancel()
                         aimJob = null
+                        stopPatrolInternal()
                         isMoving = false
                         _aimOffsetDegrees.value = 0
+                        if (state is ConnectionState.Disconnected) {
+                            haptics.tick()
+                        }
                     }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            batteryHealth.collect { health ->
+                if (health?.diagnosticsOnly == true && _patrolActive.value) {
+                    stopPatrolInternal()
+                    _statusMessage.value = "Patrol stopped: battery too weak to drive"
                 }
             }
         }
@@ -74,6 +115,18 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPermissionsDenied() {
         _statusMessage.value = "Bluetooth permissions are required"
+    }
+
+    fun completeOnboarding() {
+        preferences.onboardingComplete = true
+        _onboardingComplete.value = true
+        haptics.confirm()
+    }
+
+    fun setAutoReconnectEnabled(enabled: Boolean) {
+        preferences.autoReconnectEnabled = enabled
+        bleManager.setAutoReconnectEnabled(enabled)
+        _autoReconnectEnabled.value = enabled
     }
 
     fun startScan() {
@@ -95,7 +148,13 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
         bleManager.connect(device)
     }
 
+    fun connectLastDevice() {
+        val device = _lastDevice.value ?: return
+        connect(device)
+    }
+
     fun disconnect() {
+        stopPatrolInternal()
         driveJob?.cancel()
         driveJob = null
         aimJob?.cancel()
@@ -131,6 +190,9 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun drive(stickX: Float, stickY: Float) {
+        if (batteryHealth.value?.diagnosticsOnly == true) return
+        if (_patrolActive.value) return
+
         val magnitude = hypot(stickX.toDouble(), stickY.toDouble()).toFloat()
         if (magnitude < 0.08f) {
             targetSpeed = 0
@@ -146,7 +208,91 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
         targetSpeed = 0
     }
 
+    fun setLedColor(preset: LedPreset) {
+        _ledColor.value = preset
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = bleManager.setMainLed(preset.r, preset.g, preset.b)
+            if (ok) haptics.tick()
+        }
+    }
+
+    fun activateBoost() {
+        if (_boostCooldown.value || batteryHealth.value?.diagnosticsOnly == true) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = bleManager.activateBoost()
+            if (ok) {
+                haptics.alert()
+                _boostCooldown.value = true
+                delay(BOOST_COOLDOWN_MS)
+                _boostCooldown.value = false
+            }
+        }
+    }
+
+    fun playAnimation(animation: Bb8Animation) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = bleManager.playAnimation(animation)
+            if (ok) haptics.tick()
+        }
+    }
+
+    fun stopAnimation() {
+        viewModelScope.launch(Dispatchers.IO) {
+            bleManager.stopAnimation()
+        }
+    }
+
+    fun togglePatrol() {
+        if (_patrolActive.value) {
+            stopPatrolInternal()
+            if (connectionState.value is ConnectionState.Connected) {
+                startDriveLoop()
+            }
+        } else {
+            if (batteryHealth.value?.diagnosticsOnly == true) {
+                _statusMessage.value = "Battery too weak for patrol. Diagnostics only."
+                return
+            }
+            driveJob?.cancel()
+            driveJob = null
+            targetSpeed = 0
+            isMoving = false
+            startPatrol()
+        }
+    }
+
+    private fun startPatrol() {
+        _patrolActive.value = true
+        haptics.confirm()
+        patrolJob = viewModelScope.launch(Dispatchers.IO) {
+            val headings = listOf(0, 90, 180, 270)
+            while (isActive && _patrolActive.value) {
+                for (heading in headings) {
+                    if (!_patrolActive.value) break
+                    var elapsed = 0L
+                    while (elapsed < PATROL_LEG_MS && isActive && _patrolActive.value) {
+                        bleManager.drive(PATROL_SPEED, heading)
+                        delay(DRIVE_LOOP_MS)
+                        elapsed += DRIVE_LOOP_MS
+                    }
+                    bleManager.drive(0, heading)
+                    delay(PATROL_PAUSE_MS)
+                }
+            }
+        }
+    }
+
+    private fun stopPatrolInternal() {
+        _patrolActive.value = false
+        patrolJob?.cancel()
+        patrolJob = null
+        viewModelScope.launch(Dispatchers.IO) {
+            bleManager.drive(0, targetHeading)
+        }
+    }
+
     private fun startDriveLoop() {
+        if (_patrolActive.value) return
         driveJob?.cancel()
         driveJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
@@ -154,13 +300,13 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
                     val ok = bleManager.drive(targetSpeed, targetHeading)
                     if (!ok && connectionState.value !is ConnectionState.Connected) break
                     isMoving = true
-                    delay(200)
+                    delay(DRIVE_LOOP_MS)
                 } else if (isMoving) {
                     bleManager.drive(0, targetHeading)
                     isMoving = false
-                    delay(200)
+                    delay(DRIVE_LOOP_MS)
                 } else {
-                    delay(200)
+                    delay(DRIVE_LOOP_MS)
                 }
             }
         }
@@ -171,11 +317,26 @@ class Bb8ViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         driveJob?.cancel()
         aimJob?.cancel()
+        patrolJob?.cancel()
         bleManager.disconnect()
         super.onCleared()
     }
 
     companion object {
         private const val AIM_DEBOUNCE_MS = 120L
+        private const val DRIVE_LOOP_MS = 150L
+        private const val BOOST_COOLDOWN_MS = 3_000L
+        private const val PATROL_SPEED = 110
+        private const val PATROL_LEG_MS = 2_000L
+        private const val PATROL_PAUSE_MS = 450L
     }
+}
+
+enum class LedPreset(val label: String, val r: Int, val g: Int, val b: Int) {
+    ORANGE("Orange", 245, 166, 35),
+    TEAL("Teal", 0, 200, 180),
+    RED("Red", 255, 40, 40),
+    BLUE("Blue", 40, 120, 255),
+    WHITE("White", 255, 255, 255),
+    OFF("Off", 0, 0, 0),
 }

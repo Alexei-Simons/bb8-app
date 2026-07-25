@@ -23,18 +23,25 @@ BB-8 uses the same **Sphero BLE V1** protocol family as Ollie. This app targets 
 ## Features
 
 - **Scan & connect**: finds nearby `BB-*` devices, no Android pairing required
-- **Drive**: virtual joystick with speed and heading
+- **Auto-reconnect**: optional reconnect to the last droid after sleep disconnect
+- **Drive**: virtual joystick with speed and heading (150 ms command loop)
 - **Heading calibration (aim ring)**: rotate the outer ring so "forward" on the stick matches BB-8's head direction
 - **Battery health**: reads voltage, charge cycles, and power state from the droid firmware
+- **Diagnostics mode**: disables driving when the battery is critically low but keeps BLE tools available
+- **LED colors**: set the main LED from presets (orange, teal, red, blue, white, off)
+- **Speed boost**: sends Sphero boost command with cooldown
+- **Patrol mode**: square patrol pattern (software-driven)
+- **Animations**: experimental animatronic IDs (firmware-dependent)
+- **Onboarding**: first-run walkthrough for wake, aim, and safety
+- **Haptic feedback**: light vibration on connect, commands, and alerts
 - **Keepalive**: periodic pings to reduce sleep disconnects while connected
-- **Modern UI**: dark theme, connection status, collapsible battery card
+- **Modern UI**: dark theme, connection status, collapsible battery and extras panels
 
-### Planned
+### Roadmap
 
-- LED color control
-- Droid animations / sounds
-- Speed boost
-- Patrol mode
+- [x] Phase 1: Scan, connect, drive
+- [x] Phase 2: LED, animations, speed boost, patrol, onboarding
+- [ ] Phase 3: Macro editor, sensor streaming UI, signed release builds
 
 ---
 

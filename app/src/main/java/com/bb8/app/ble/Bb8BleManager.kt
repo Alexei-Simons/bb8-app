@@ -14,8 +14,10 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.bb8.app.sphero.RollMode
+import com.bb8.app.data.Bb8Preferences
+import com.bb8.app.sphero.Bb8Animation
 import com.bb8.app.sphero.ReverseFlag
+import com.bb8.app.sphero.RollMode
 import com.bb8.app.sphero.SpheroCommands
 import com.bb8.app.sphero.SpheroPacket
 import com.bb8.app.sphero.SpheroPacketBuilder
@@ -71,8 +73,12 @@ class Bb8BleManager(context: Context) {
     private val pendingResponse = AtomicReference<CompletableDeferred<SpheroResponse>?>(null)
 
     private val deviceByAddress = mutableMapOf<String, BluetoothDevice>()
+    private val preferences = Bb8Preferences(appContext)
     private var connectionTimeoutJob: Job? = null
     private var keepaliveJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var userInitiatedDisconnect = false
+    private var lastConnectedDevice: ScannedDevice? = null
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -123,15 +129,27 @@ class Bb8BleManager(context: Context) {
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     connectionTimeoutJob?.cancel()
                     stopKeepalive()
-                    if (_connectionState.value !is ConnectionState.Disconnected) {
-                        val message = if (status != BluetoothGatt.GATT_SUCCESS) {
-                            "Disconnected (status $status)"
-                        } else {
-                            null
+                    val wasLinked = _connectionState.value is ConnectionState.Connected
+                    val disconnectMessage = if (status != BluetoothGatt.GATT_SUCCESS) {
+                        "Disconnected (status $status)"
+                    } else {
+                        null
+                    }
+                    cleanupGatt()
+                    when {
+                        userInitiatedDisconnect -> {
+                            _connectionState.value = ConnectionState.Disconnected
                         }
-                        cleanupGatt()
-                        _connectionState.value = message?.let { ConnectionState.Error(it) }
-                            ?: ConnectionState.Disconnected
+                        wasLinked && preferences.autoReconnectEnabled && lastConnectedDevice != null -> {
+                            _connectionState.value = ConnectionState.Error(
+                                disconnectMessage ?: "BB-8 went to sleep. Reconnecting...",
+                            )
+                            scheduleReconnect()
+                        }
+                        else -> {
+                            _connectionState.value = disconnectMessage?.let { ConnectionState.Error(it) }
+                                ?: ConnectionState.Disconnected
+                        }
                     }
                 }
             }
@@ -222,11 +240,16 @@ class Bb8BleManager(context: Context) {
         }
 
         stopScan()
+        userInitiatedDisconnect = false
+        reconnectJob?.cancel()
         targetDeviceName = device.name
+        lastConnectedDevice = device
+        preferences.saveLastDevice(device)
         _connectionState.value = ConnectionState.Connecting
 
         val bluetoothDevice = deviceByAddress[device.address]
             ?: bleAdapter.getRemoteDevice(device.address)
+        deviceByAddress[device.address] = bluetoothDevice
 
         connectionTimeoutJob?.cancel()
         connectionTimeoutJob = scope.launch {
@@ -247,11 +270,24 @@ class Bb8BleManager(context: Context) {
         }
     }
 
+    fun connectLastDevice(): Boolean {
+        val device = preferences.lastDevice() ?: return false
+        connect(device)
+        return true
+    }
+
+    fun setAutoReconnectEnabled(enabled: Boolean) {
+        preferences.autoReconnectEnabled = enabled
+    }
+
     fun disconnect() {
+        userInitiatedDisconnect = true
+        reconnectJob?.cancel()
         scope.launch {
             stopKeepalive()
             writeMutex.withLock {
                 runCatching {
+                    sendPacketLocked(SpheroCommands.disableDataStreaming(packetBuilder))
                     sendPacketLocked(SpheroCommands.roll(packetBuilder, 0, 0, RollMode.STOP, ReverseFlag.OFF))
                 }
             }
@@ -306,6 +342,49 @@ class Bb8BleManager(context: Context) {
         }.getOrElse { error ->
             Log.w(TAG, "Reset heading failed", error)
             false
+        }
+    }
+
+    suspend fun setMainLed(r: Int, g: Int, b: Int): Boolean = sendSimpleCommand {
+        SpheroCommands.setMainLed(packetBuilder, r, g, b)
+    }
+
+    suspend fun activateBoost(): Boolean = sendSimpleCommand {
+        SpheroCommands.boost(packetBuilder)
+    }
+
+    suspend fun playAnimation(animation: Bb8Animation): Boolean = sendSimpleCommand {
+        SpheroCommands.playAnimation(packetBuilder, animation.id)
+    }
+
+    suspend fun stopAnimation(): Boolean = sendSimpleCommand {
+        SpheroCommands.stopAnimation(packetBuilder)
+    }
+
+    suspend fun runPatrolMacro(): Boolean = sendSimpleCommand {
+        SpheroCommands.runMacro(packetBuilder, 1)
+    }
+
+    private suspend fun sendSimpleCommand(build: () -> SpheroPacket): Boolean {
+        if (commandCharacteristic == null || gatt == null) return false
+        if (_connectionState.value !is ConnectionState.Connected) return false
+        return runCatching {
+            sendPacket(build())
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "Command failed", error)
+            false
+        }
+    }
+
+    private fun scheduleReconnect() {
+        val device = lastConnectedDevice ?: return
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(RECONNECT_DELAY_MS)
+            if (!userInitiatedDisconnect && _connectionState.value !is ConnectionState.Connected) {
+                connect(device)
+            }
         }
     }
 
@@ -389,13 +468,14 @@ class Bb8BleManager(context: Context) {
         val timeoutPacket = SpheroCommands.setInactivityTimeout(packetBuilder, INACTIVITY_TIMEOUT_SEC)
         sendPacketWithResponse(timeoutPacket)
         sendPacketWithResponse(SpheroCommands.ping(packetBuilder))
+        runCatching { sendPacket(SpheroCommands.enableLocatorStreaming(packetBuilder)) }
     }
 
     private suspend fun readBatteryHealth() {
         val response = sendPacketWithResponse(SpheroCommands.getPowerState(packetBuilder))
         _batteryReadAttempted.value = true
         if (response == null) {
-            Log.w(TAG, "Battery read failed — no response from droid")
+            Log.w(TAG, "Battery read failed: no response from droid")
             return
         }
         Log.d(TAG, "Power state raw: ${response.data.joinToString(" ") { "%02x".format(it) }}")
@@ -407,7 +487,7 @@ class Bb8BleManager(context: Context) {
                 "Battery: ${health.voltageVolts}V ${health.powerState} cycles=${health.chargeCycles} ${health.level}",
             )
         } else {
-            Log.w(TAG, "Battery read failed — unexpected payload (${response.data.size} bytes)")
+            Log.w(TAG, "Battery read failed: unexpected payload (${response.data.size} bytes)")
         }
     }
 
@@ -545,6 +625,7 @@ class Bb8BleManager(context: Context) {
         private const val WRITE_TIMEOUT_MS = 5_000L
         private const val RESPONSE_TIMEOUT_MS = 5_000L
         private const val KEEPALIVE_INTERVAL_MS = 10_000L
+        private const val RECONNECT_DELAY_MS = 2_500L
         private const val INACTIVITY_TIMEOUT_SEC = 600
         private val CLIENT_CONFIG_UUID: UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")

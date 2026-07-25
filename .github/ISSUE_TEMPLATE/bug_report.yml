@@ -1,0 +1,91 @@
+name: Bug report
+description: Something is broken in the app (crash, connection, UI, wrong data)
+title: "[Bug]: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    value: |
+      Thanks for reporting a bug. Please search [existing issues](https://github.com/Alexei-Simons/bb8-app/issues) first.
+
+      **Developers:** link this issue from your PR with `Closes #<number>`.
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: App version
+      options:
+        - v0.3.0
+        - v0.2.0
+        - v0.1.0
+        - main branch (self-built)
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Phone model
+      description: e.g. Samsung Galaxy S22 Ultra
+      placeholder: Manufacturer and model
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: e.g. 14
+    validations:
+      required: true
+
+  - type: input
+    id: droid
+    attributes:
+      label: BB-8 name (if known)
+      description: BLE name shown in scan, e.g. BB-BC60
+      placeholder: BB-XXXX
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do before the problem happened?
+      placeholder: |
+        1. Wake BB-8 off charger
+        2. Tap Scan for Droids
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Optional. `adb logcat` filtered by `Bb8BleManager` helps.
+      render: shell
+
+  - type: checkboxes
+    id: battery
+    attributes:
+      label: Battery context
+      options:
+        - label: BB-8 was on the charging base
+        - label: Battery card showed CRITICAL or diagnostics-only mode
+        - label: Droid felt warm or shut down quickly off charger

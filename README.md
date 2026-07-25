@@ -1,10 +1,38 @@
 # BB-8 Controller
 
-An unofficial Android app to control the **Sphero Star Wars BB-8** droid (2015-2018) over Bluetooth Low Energy.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Alexei-Simons/bb8-app)](https://github.com/Alexei-Simons/bb8-app/releases)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 
-Sphero discontinued the original BB-8, BB-9E, and Sphero Droids apps. They no longer work reliably on modern Android. This project is a from-scratch replacement built for current phones so you can still wake, connect, drive, and check battery health on a real BB-8.
+An unofficial, open-source Android app to control the **Sphero Star Wars BB-8** droid (2015-2018) over Bluetooth Low Energy.
 
-**This app is not made by, endorsed by, or affiliated with Sphero or Lucasfilm.**
+Sphero discontinued the original BB-8 apps. They no longer work reliably on modern Android. This project is a community-maintained replacement: scan, connect, drive, diagnose battery health, run macros, and stream locator data from your droid.
+
+| | |
+|---|---|
+| **Download** | [GitHub Releases](https://github.com/Alexei-Simons/bb8-app/releases) |
+| **Report bugs** | [Open an issue](https://github.com/Alexei-Simons/bb8-app/issues/new/choose) |
+| **Contribute** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| **Privacy** | [PRIVACY.md](PRIVACY.md) (no cloud, no analytics) |
+
+> **Disclaimer:** This app is not made by, endorsed by, or affiliated with Sphero or Lucasfilm. See [LEGAL.md](LEGAL.md).
+
+---
+
+## Table of contents
+
+- [What hardware this is for](#what-hardware-this-is-for)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Install](#install-pre-built-apk)
+- [How to use](#how-to-use)
+- [Battery health](#battery-health)
+- [Troubleshooting](#troubleshooting)
+- [Build from source](#build-from-source)
+- [Community and contributing](#community-and-contributing)
+- [Documentation](#documentation)
+- [License](#license)
 
 ---
 
@@ -22,7 +50,7 @@ BB-8 uses the same **Sphero BLE V1** protocol family as Ollie. This app targets 
 
 ## Features
 
-- **Scan & connect**: finds nearby `BB-*` devices, no Android pairing required
+- **Scan and connect**: finds nearby `BB-*` devices, no Android pairing required
 - **Auto-reconnect**: optional reconnect to the last droid after sleep disconnect
 - **Drive**: virtual joystick with speed and heading (150 ms command loop)
 - **Heading calibration (aim ring)**: rotate the outer ring so "forward" on the stick matches BB-8's head direction
@@ -46,43 +74,28 @@ BB-8 uses the same **Sphero BLE V1** protocol family as Ollie. This app targets 
 - [x] Phase 3: Macro editor, sensor streaming UI, signed release builds
 - [ ] Phase 4: Play Store listing, collision detection, custom icon polish
 
-### Signed releases
-
-Tag a version to build APKs on GitHub Actions:
-
-```bash
-git tag v0.3.0
-git push origin v0.3.0
-```
-
-Optional GitHub secrets for a signed release APK (otherwise release builds use the debug keystore in CI):
-
-| Secret | Purpose |
-|--------|---------|
-| `ANDROID_KEYSTORE_BASE64` | Base64-encoded `.jks` file |
-| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
-| `ANDROID_KEY_ALIAS` | Key alias |
-| `ANDROID_KEY_PASSWORD` | Key password |
-
 ---
 
 ## Requirements
 
 - **Phone:** Android 8.0+ (API 26), Bluetooth LE
 - **Droid:** Sphero BB-8 with a battery that can hold enough charge to power BLE (see [Troubleshooting](#troubleshooting))
-- **Permissions:** Bluetooth scan & connect (requested at launch on Android 12+)
+- **Permissions:** Bluetooth scan and connect (requested at launch on Android 12+)
 
 ---
 
 ## Install (pre-built APK)
 
-Releases will be published on [GitHub Releases](https://github.com/Alexei-Simons/bb8-app/releases) when available.
+**Latest release:** [github.com/Alexei-Simons/bb8-app/releases](https://github.com/Alexei-Simons/bb8-app/releases)
 
-To build locally, see [Build from source](#build-from-source).
+1. Download `app-debug.apk` (recommended for sideloading) or `app-release.apk`
+2. Install on your phone (enable "Install unknown apps" for your browser or file manager if prompted)
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+To build locally, see [Build from source](#build-from-source).
 
 ---
 
@@ -92,7 +105,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 2. **Open the app** and grant Bluetooth permissions.
 3. Tap **Scan for Droids** and select your BB-8 from the list.
 4. Wait for **LINKED** on the drive screen.
-5. **Calibrate heading**: drag the **outer ring** so the teal arrow points the same way as BB-8's head. This sets which direction "up" on the stick means.
+5. **Calibrate heading**: drag the **outer ring** so the teal arrow points the same way as BB-8's head.
 6. **Drive**: drag the **center stick** to move; release to stop.
 7. Review the **Battery Health** card for voltage and status.
 8. Tap **Disconnect** when finished (cleaner reconnect next time).
@@ -103,7 +116,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---------|--------|
 | Outer ring | Aim / heading calibration |
 | Center stick | Drive (speed + direction) |
-| Reset aim | Sets heading reference back to 0° |
+| Reset aim | Sets heading reference back to 0 degrees |
 | Disconnect | Ends BLE session |
 
 ---
@@ -126,9 +139,11 @@ Aging BB-8 units often report **CRITICAL** or very low voltage, especially off t
 |---------|----------------|
 | BB-8 not in scan list | Wake off charger; shake; stay within ~3 m; toggle Bluetooth |
 | Stuck on "Connecting" | Disconnect, re-seat on charger briefly, wake again, rescan |
-| Connects but won't drive | Calibrate the aim ring; ensure battery isn't critically dead |
-| Disconnects after ~30 s idle | Should be improved by keepalive; stay connected and retry |
+| Connects but won't drive | Calibrate the aim ring; ensure battery is not critically dead |
+| Disconnects after ~30 s idle | Keepalive should help; stay connected and retry |
 | Battery shows CRITICAL | Cell is likely bad; charger may keep BLE alive but not enough to roll |
+
+More help: [SUPPORT.md](SUPPORT.md) or [open an issue](https://github.com/Alexei-Simons/bb8-app/issues/new/choose).
 
 ---
 
@@ -156,30 +171,53 @@ sdk.dir=C\:\\Users\\YourName\\AppData\\Local\\Android\\Sdk
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot"
-.\gradlew.bat assembleDebug
+.\gradlew.bat test assembleDebug
 ```
 
 **macOS / Linux:**
 
 ```bash
-./gradlew assembleDebug
+./gradlew test assembleDebug
 ```
 
 Output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ### Protocol references
 
-Clone optional vendor repos for reverse-engineering notes:
-
-```bash
-# See vendor/README.md for clone commands
-```
-
-Technical details: [docs/PROTOCOL.md](docs/PROTOCOL.md)
+Clone optional vendor repos for reverse-engineering notes (see `vendor/README.md`). Technical details: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ---
 
-## Project structure
+## Community and contributing
+
+**We welcome issues and pull requests.**
+
+You do not need to write code to help:
+
+- [Open a bug report](https://github.com/Alexei-Simons/bb8-app/issues/new?template=bug_report.yml) with steps to reproduce
+- [Suggest a feature](https://github.com/Alexei-Simons/bb8-app/issues/new?template=feature_request.yml)
+- [Describe hardware/battery symptoms](https://github.com/Alexei-Simons/bb8-app/issues/new?template=hardware_support.yml)
+- Improve documentation via pull request
+
+**Developers:** please read [CONTRIBUTING.md](CONTRIBUTING.md). Every PR should link an issue (`Closes #123`). `main` is protected and requires code owner review.
+
+Please do not submit Sphero copyrighted assets (sounds, animations, branding). This project implements an open protocol interface only.
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, PR workflow, coding standards |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+| [PRIVACY.md](PRIVACY.md) | Data collection and storage (local only) |
+| [LEGAL.md](LEGAL.md) | Trademarks, disclaimers, liability |
+| [SUPPORT.md](SUPPORT.md) | Where to get help |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | Sphero BLE V1 protocol notes |
+
+### Project structure
 
 ```
 app/src/main/java/com/bb8/app/
@@ -193,13 +231,14 @@ vendor/                Third-party protocol references (gitignored clones)
 
 **Stack:** Kotlin, Jetpack Compose, Android BLE GATT, Sphero V1 packet protocol
 
----
+### Signed releases
 
-## Contributing
+Tag a version to publish APKs (see [CONTRIBUTING.md](CONTRIBUTING.md) for CI secrets):
 
-Issues and pull requests are welcome on [GitHub](https://github.com/Alexei-Simons/bb8-app).
-
-Please do not submit Sphero copyrighted assets (sounds, animations, branding). This project implements an open protocol interface only.
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
 
 ---
 
@@ -213,4 +252,4 @@ Please do not submit Sphero copyrighted assets (sounds, animations, branding). T
 
 MIT License. See [LICENSE](LICENSE).
 
-Use at your own risk. You are responsible for safe handling of lithium-polymer batteries and compliance with local laws. Star Wars, BB-8, and Sphero are trademarks of their respective owners.
+Use at your own risk. You are responsible for safe handling of lithium-polymer batteries and compliance with local laws. Star Wars, BB-8, and Sphero are trademarks of their respective owners. Full legal text: [LEGAL.md](LEGAL.md).

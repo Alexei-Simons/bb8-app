@@ -1,0 +1,70 @@
+name: Hardware support
+description: Battery, charging, warm shell, or drive failure (not necessarily an app bug)
+title: "[Hardware]: "
+labels:
+  - hardware
+  - needs-triage
+body:
+  - type: markdown
+    value: |
+      Many BB-8 units have aging LiPo batteries. This template helps distinguish **hardware limits** from **app bugs**.
+
+      For app crashes or connection bugs, use **Bug report** instead.
+
+  - type: input
+    id: droid
+    attributes:
+      label: BB-8 BLE name
+      placeholder: BB-BC60
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: Symptoms
+      description: What happens physically and in the app?
+      placeholder: |
+        - Warm bottom when off charger
+        - Shuts down within seconds of leaving dock
+        - Battery card shows CRITICAL, 3.2V, 800+ cycles
+    validations:
+      required: true
+
+  - type: dropdown
+    id: on_charger
+    attributes:
+      label: Behavior on charger
+      options:
+        - Connects and stays linked while docked
+        - Connects briefly then drops
+        - Does not appear in scan even on charger
+        - Not tested
+    validations:
+      required: true
+
+  - type: dropdown
+    id: off_charger
+    attributes:
+      label: Behavior off charger
+      options:
+        - Drives normally
+        - Connects but will not drive
+        - Appears in scan but cannot connect
+        - Powers off immediately
+        - Not tested
+    validations:
+      required: true
+
+  - type: textarea
+    id: voltage
+    attributes:
+      label: Battery card reading (if any)
+      placeholder: e.g. 3.15V, CRITICAL, 827 cycles
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: I understand swollen or punctured LiPo batteries are dangerous and will not open the shell without proper guidance

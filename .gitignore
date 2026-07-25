@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+**/build/
+
+# Vendor clones (re-fetch via vendor/README.md)
+vendor/*
+!vendor/README.md
+/.idea/
+.DS_Store
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.ap_
+*.aab
+
+# Local SDK path (machine-specific)
+local.properties
